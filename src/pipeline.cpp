@@ -62,8 +62,6 @@ namespace vision {
         return cv::mean(gray)[0];
     }
 
-
-
     static cv::Mat yuv420ToRgba(const uint8_t* y, const uint8_t* u, const uint8_t* v,
             int width, int height,
             int yRowStride, int uRowStride, int vRowStride,
@@ -142,15 +140,6 @@ namespace vision {
         auto t1 = std::chrono::steady_clock::now();
         out.processingMs = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
         return out;
-    }
-
-    bool encodeFrame(int quality, std::vector<uint8_t>& out) {
-        cv::Mat rgba;
-        if (!getLastRgbaCopy(rgba)) return false;
-        cv::Mat bgr;
-        cv::cvtColor(rgba, bgr, cv::COLOR_RGBA2BGR);
-        std::vector<int> params = { cv::IMWRITE_JPEG_QUALITY, std::max(0, std::min(100, quality)) };
-        return cv::imencode(".jpg", bgr, out, params);
     }
 
     const std::vector<std::string>& getLabels() { return labels; }

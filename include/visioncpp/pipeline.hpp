@@ -25,12 +25,6 @@ namespace vision {
             int rotationDeg);
 
 /**
- * JPEG-encode the last rotated RGBA frame kept by the pipeline into 'out'.
- * Returns true on success.
- */
-    bool encodeFrame(int quality, std::vector<uint8_t>& out);
-
-/**
  * Labels currently used by the pipeline (resolved during initialize).
  */
     const std::vector<std::string>& getLabels();
