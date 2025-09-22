@@ -22,7 +22,32 @@ extern unsigned int  labelmap_len;
 
 namespace vision {
 
-    static std::vector<std::string> g_labels;
+    static std::vector<std::string> labels;
+
+    static std::vector<std::string> splitLines(const char* data, size_t n) {
+        std::vector<std::string> out;
+        out.reserve(128);
+        size_t i=0, start=0;
+        while (i<n) {
+            if (data[i]=='\n' || i==n-1) {
+                size_t end = (data[i]=='\n') ? i : i+1;
+                std::string s(data+start, data+end);
+                if (!s.empty() && s.back()=='\r') s.pop_back();
+                if (!s.empty()) out.push_back(s);
+                start = i+1;
+            }
+            ++i;
+        }
+        return out;
+    }
+
+    bool initialize(const InitOptions& opt) {
+        labels = splitLines(reinterpret_cast<const char*>(labelmap), static_cast<size_t>(labelmap_len));
+        tfliteSetLabels(labels);
+        return tfliteInitFromBuffer(detect,
+                static_cast<size_t>(detect_len),
+                opt.tfl);
+    }
 
     static double laplacianVar(const cv::Mat& gray) {
         cv::Mat lap; cv::Laplacian(gray, lap, CV_64F);
@@ -37,21 +62,7 @@ namespace vision {
         return cv::mean(gray)[0];
     }
 
-    static std::vector<std::string> splitLines(const char* data, size_t n) {
-        std::vector<std::string> out; out.reserve(128);
-        size_t i=0, start=0;
-        while (i<n) {
-            if (data[i]=='\n' || i==n-1) {
-                size_t end = (data[i]=='\n') ? i : i+1;
-                std::string s(data+start, data+end);
-                if (!s.empty() && s.back()=='\r') s.pop_back();
-                if (!s.empty()) out.push_back(s);
-                start = i+1;
-            }
-            ++i;
-        }
-        return out;
-    }
+
 
     static cv::Mat yuv420ToRgba(const uint8_t* y, const uint8_t* u, const uint8_t* v,
             int width, int height,
@@ -96,19 +107,8 @@ namespace vision {
         }
     }
 
-    bool pipelineInitializeEmbedded(const std::vector<std::string>& labels, const InitOptions& opt) {
-        std::vector<std::string> lbs = labels;
-        if (lbs.empty()) {
-            lbs = splitLines(reinterpret_cast<const char*>(labelmap), static_cast<size_t>(labelmap_len));
-        }
-        g_labels = lbs;
-        tfliteSetLabels(g_labels);
-        return tfliteInitFromBuffer(detect,
-                static_cast<size_t>(detect_len),
-                opt.tfl);
-    }
 
-    Detections pipelineProcessYuvRotated(const YuvFrame& f, const ProcessConfig& cfg, int rotationDeg) {
+    Detections processFrame(const YuvFrame& f, const ProcessConfig& cfg, int rotationDeg) {
         auto t0 = std::chrono::steady_clock::now();
         Detections out;
 
@@ -121,11 +121,11 @@ namespace vision {
         setLastRgba(rgba);
 
         cv::Mat gray; cv::cvtColor(rgba, gray, cv::COLOR_RGBA2GRAY);
-        out.blurVar      = laplacianVar(gray);
+        out.blur      = laplacianVar(gray);
         out.glarePercent = glarePercent(gray);
         out.brightness   = meanBrightness(gray);
 
-        const auto det = tfliteDetect(rgba, cfg.scoreThreshold);
+        const auto det = tfliteDetect(rgba, cfg.score);
         out.boxes.reserve(det.size() * 4);
         out.scores.reserve(det.size());
         out.classes.reserve(det.size());
@@ -144,11 +144,7 @@ namespace vision {
         return out;
     }
 
-    Detections pipelineProcessYuv(const YuvFrame& f, const ProcessConfig& cfg) {
-        return pipelineProcessYuvRotated(f, cfg, 0);
-    }
-
-    bool pipelineEncodeLastRgbaToJpeg(int quality, std::vector<uint8_t>& out) {
+    bool encodeFrame(int quality, std::vector<uint8_t>& out) {
         cv::Mat rgba;
         if (!getLastRgbaCopy(rgba)) return false;
         cv::Mat bgr;
@@ -157,6 +153,6 @@ namespace vision {
         return cv::imencode(".jpg", bgr, out, params);
     }
 
-    const std::vector<std::string>& pipelineLabels() { return g_labels; }
+    const std::vector<std::string>& getLabels() { return labels; }
 
 } // namespace vision
